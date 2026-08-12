@@ -53,6 +53,14 @@ class FakeAudio {
   pause() {
     this.paused = true;
   }
+
+  removeAttribute(name: string) {
+    if (name === 'src') this.src = '';
+  }
+
+  load() {
+    // no-op
+  }
 }
 
 let fakeAudio: FakeAudio;
