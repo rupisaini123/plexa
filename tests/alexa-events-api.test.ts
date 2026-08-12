@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
-import { closeDb, getAlexaEventsPage, getDb, recordAlexaEvent } from '../src/db/index.js';
+import { closeDb, getDb, recordAlexaEvent } from '../src/db/index.js';
 
 async function loginAgent(app: ReturnType<typeof createApp>) {
   const agent = request.agent(app);
