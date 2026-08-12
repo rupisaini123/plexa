@@ -1,28 +1,22 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ListMusic, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ListMusic, Plus, Search } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { Artwork } from '../components/Artwork';
-import { TrackRow } from '../components/TrackRow';
-import { AddToPlaylistButton } from '../components/AddToPlaylistButton';
 import { InfiniteListBoundary } from '../components/InfiniteListBoundary';
+import { PlaylistHero } from '../components/PlaylistHero';
+import { PlaylistTracksList } from '../components/PlaylistTracksList';
 import { PlaylistItemSkeleton, SkeletonStack, TrackRowSkeleton } from '../components/Skeleton';
-import { api, fetchCsrf, type PageResult, type TrackItem } from '../lib/api';
+import { Artwork } from '../components/Artwork';
+import { api, fetchCsrf, type PageResult, type PlaylistSummary, type TrackItem } from '../lib/api';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaylistActions } from '../context/PlaylistActionsContext';
 import { useInfiniteMediaList } from '../hooks/useInfiniteMediaList';
 
-interface Playlist {
-  ratingKey: string;
-  title: string;
-  leafCount?: number;
-  artUrl?: string;
-}
-
-type DialogMode = 'rename' | 'delete' | 'removeTrack' | null;
+type DialogMode = 'create' | 'rename' | 'delete' | 'removeTrack' | null;
 
 export function PlaylistsPage() {
   const [selected, setSelected] = useState<string | null>(null);
-  const [newTitle, setNewTitle] = useState('');
+  const [filterQuery, setFilterQuery] = useState('');
+  const [createTitle, setCreateTitle] = useState('');
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [renameValue, setRenameValue] = useState('');
   const [dialogBusy, setDialogBusy] = useState(false);
@@ -31,14 +25,13 @@ export function PlaylistsPage() {
   const [sidebarReset, setSidebarReset] = useState(0);
   const [tracksReset, setTracksReset] = useState(0);
   const sidebarScrollRef = useRef<HTMLDivElement>(null);
-  const tracksScrollRef = useRef<HTMLOListElement>(null);
   const player = usePlayer();
   const { openForPlaylist, revision } = usePlaylistActions();
 
-  const playlists = useInfiniteMediaList<Playlist>({
+  const playlists = useInfiniteMediaList<PlaylistSummary>({
     resetKey: `playlists:${sidebarReset}`,
     pageSize: 40,
-    fetchPage: async ({ start, size, signal }) => api<PageResult<Playlist>>(
+    fetchPage: async ({ start, size, signal }) => api<PageResult<PlaylistSummary>>(
       `/api/playlists?start=${start}&size=${size}`,
       { signal },
     ),
@@ -60,6 +53,13 @@ export function PlaylistsPage() {
 
   const selectedPlaylist = playlists.items.find((p) => p.ratingKey === selected) ?? null;
   const trackCount = selectedPlaylist?.leafCount ?? tracks.items.length;
+  const playerActive = Boolean(player.current);
+
+  const filteredPlaylists = useMemo(() => {
+    const query = filterQuery.trim().toLowerCase();
+    if (!query) return playlists.items;
+    return playlists.items.filter((playlist) => playlist.title.toLowerCase().includes(query));
+  }, [filterQuery, playlists.items]);
 
   useEffect(() => {
     setTracksReset((value) => value + 1);
@@ -75,12 +75,32 @@ export function PlaylistsPage() {
     setActionError('');
   };
 
-  const createPlaylist = async (e: FormEvent) => {
-    e.preventDefault();
-    await fetchCsrf();
-    await api('/api/playlists', { method: 'POST', body: JSON.stringify({ title: newTitle }) });
-    setNewTitle('');
-    setSidebarReset((value) => value + 1);
+  const openCreateDialog = () => {
+    setCreateTitle('');
+    setDialog('create');
+  };
+
+  const createPlaylist = async () => {
+    const title = createTitle.trim();
+    if (!title) return;
+    setDialogBusy(true);
+    try {
+      await fetchCsrf();
+      const created = await api<PlaylistSummary>('/api/playlists', {
+        method: 'POST',
+        body: JSON.stringify({ title }),
+      });
+      setDialog(null);
+      setCreateTitle('');
+      setSidebarReset((value) => value + 1);
+      if (created?.ratingKey) {
+        setSelected(created.ratingKey);
+      }
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setDialogBusy(false);
+    }
   };
 
   const openRename = () => {
@@ -98,6 +118,7 @@ export function PlaylistsPage() {
     if (dialogBusy) return;
     setDialog(null);
     setTrackToRemove(null);
+    setCreateTitle('');
   };
 
   const renamePlaylist = async () => {
@@ -141,44 +162,36 @@ export function PlaylistsPage() {
 
   const confirmRemoveTrack = async () => {
     if (!selected || !trackToRemove) return;
+    const removedId = trackToRemove.playlistItemId;
+    const removedTrack = tracks.items.find((t) => t.playlistItemId === removedId);
     setDialogBusy(true);
     try {
       await fetchCsrf();
-      await api(`/api/playlists/${selected}/tracks/${trackToRemove.playlistItemId}`, { method: 'DELETE' });
+      await api(`/api/playlists/${selected}/tracks/${removedId}`, { method: 'DELETE' });
       setDialog(null);
       setTrackToRemove(null);
-      setTracksReset((value) => value + 1);
-      setSidebarReset((value) => value + 1);
+      const nextTracks = tracks.items.filter((t) => t.playlistItemId !== removedId);
+      tracks.replaceItems(nextTracks);
+      playlists.replaceItems(
+        playlists.items.map((p) => {
+          if (p.ratingKey !== selected) return p;
+
+          const nextLeafCount = Math.max(0, (p.leafCount ?? tracks.items.length) - 1);
+          let nextDuration = p.duration;
+          if (nextLeafCount === 0) {
+            nextDuration = 0;
+          } else if (p.duration != null && removedTrack?.durationMs != null) {
+            nextDuration = Math.max(0, p.duration - removedTrack.durationMs);
+          }
+
+          return { ...p, leafCount: nextLeafCount, duration: nextDuration };
+        }),
+      );
     } catch (err) {
       setActionError((err as Error).message);
     } finally {
       setDialogBusy(false);
     }
-  };
-
-  const moveTrack = async (index: number, direction: -1 | 1) => {
-    if (!selected) return;
-    const target = index + direction;
-    if (target < 0) return;
-
-    if (target >= tracks.items.length) {
-      if (!tracks.hasMore) return;
-      tracks.loadMore();
-      return;
-    }
-
-    const item = tracks.items[index];
-    const after = direction < 0 ? tracks.items[target - 1] : tracks.items[target];
-    if (!item.playlistItemId) return;
-    await fetchCsrf();
-    await api(`/api/playlists/${selected}/reorder`, {
-      method: 'POST',
-      body: JSON.stringify({
-        playlistItemId: item.playlistItemId,
-        afterPlaylistItemId: after?.playlistItemId,
-      }),
-    });
-    setTracksReset((value) => value + 1);
   };
 
   const playAll = async (shuffle = false) => {
@@ -187,61 +200,97 @@ export function PlaylistsPage() {
     await player.playTracks(res.items, shuffle);
   };
 
-  const trackListMaxHeight = player.current
-    ? 'lg:max-h-[calc(100vh-26rem)]'
-    : 'lg:max-h-[calc(100vh-18rem)]';
-
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[320px_1fr]">
+    <div className="playlist-split">
       <section
         data-testid="playlists-sidebar"
-        className="card space-y-4 self-start p-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-hidden"
+        className="playlist-sidebar card"
       >
-        <h2 className="font-semibold">Playlists</h2>
-        <form onSubmit={createPlaylist} className="flex gap-2">
-          <input className="input" placeholder="New playlist" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} aria-label="New playlist name" />
-          <button className="btn btn-primary" type="submit">Add</button>
-        </form>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">Your music</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Playlists</h1>
+        </div>
+
+        <div className="flex gap-2">
+          <div className="input flex min-w-0 flex-1 items-center gap-2">
+            <Search className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+            <input
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted focus:ring-0"
+              placeholder="Filter playlists"
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              aria-label="Filter playlists"
+            />
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary shrink-0"
+            aria-label="New playlist"
+            onClick={openCreateDialog}
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            <span className="hidden sm:inline">Create</span>
+          </button>
+        </div>
+
         {playlists.loading && playlists.items.length === 0 && (
           <SkeletonStack count={6} label="Loading playlists">
             {(index) => <PlaylistItemSkeleton key={index} />}
           </SkeletonStack>
         )}
+
         {(actionError || playlists.error) && (
           <p className="text-sm text-danger" role="alert">{actionError || playlists.error}</p>
         )}
-        <div
-          ref={sidebarScrollRef}
-          className="space-y-2 lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto"
-        >
-          {playlists.items.map((p) => (
-            <button
-              key={p.ratingKey}
-              type="button"
-              className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                selected === p.ratingKey
-                  ? 'bg-accent text-white'
-                  : 'bg-surface-muted/60 hover:bg-surface-muted'
-              }`}
-              onClick={() => openPlaylist(p.ratingKey)}
-            >
-              <Artwork
-                src={p.artUrl}
-                alt=""
-                className="h-10 w-10"
-                rounded="lg"
-                icon={<ListMusic className="h-4 w-4" aria-hidden />}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{p.title}</span>
-                {p.leafCount ? (
-                  <span className={`text-xs ${selected === p.ratingKey ? 'text-white/70' : 'text-muted'}`}>
-                    {p.leafCount} {p.leafCount === 1 ? 'track' : 'tracks'}
-                  </span>
-                ) : null}
-              </span>
+
+        {!playlists.loading && playlists.items.length === 0 && !playlists.error && (
+          <div className="rounded-xl border border-dashed border-white/10 bg-surface-muted/30 p-4 text-center">
+            <ListMusic className="mx-auto h-8 w-8 text-muted" aria-hidden />
+            <p className="mt-2 text-sm font-medium">Create your first playlist</p>
+            <p className="mt-1 text-xs text-muted">Organize tracks for every mood and moment.</p>
+            <button type="button" className="btn btn-primary mt-3" onClick={openCreateDialog}>
+              Create playlist
             </button>
-          ))}
+          </div>
+        )}
+
+        <div ref={sidebarScrollRef} className="playlist-sidebar-scroll">
+          {filteredPlaylists.map((p) => {
+            const isSelected = selected === p.ratingKey;
+            return (
+              <button
+                key={p.ratingKey}
+                type="button"
+                className={`playlist-rail-item ${
+                  isSelected ? 'playlist-rail-item-selected' : 'playlist-rail-item-default'
+                }`}
+                onClick={() => openPlaylist(p.ratingKey)}
+              >
+                <Artwork
+                  src={p.artUrl}
+                  alt=""
+                  className="h-10 w-10"
+                  rounded="lg"
+                  icon={<ListMusic className="h-4 w-4" aria-hidden />}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{p.title}</span>
+                  {p.leafCount ? (
+                    <span className="text-xs text-muted">
+                      {p.leafCount} {p.leafCount === 1 ? 'track' : 'tracks'}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted">Empty</span>
+                  )}
+                </span>
+              </button>
+            );
+          })}
+
+          {playlists.items.length > 0 && filteredPlaylists.length === 0 && (
+            <p className="px-2 py-3 text-sm text-muted">No playlists match your filter.</p>
+          )}
+
           <InfiniteListBoundary
             hasMore={playlists.hasMore}
             loading={playlists.loading}
@@ -254,121 +303,78 @@ export function PlaylistsPage() {
         </div>
       </section>
 
-      <section className="card min-w-0 p-4 sm:p-5">
+      <section
+        className={`min-w-0 space-y-5${playerActive ? ' playlist-detail-player-active' : ''}`}
+      >
         {selected && selectedPlaylist ? (
-          <div className="space-y-5">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex min-w-0 items-center gap-4">
-                <Artwork
-                  src={selectedPlaylist.artUrl ?? tracks.items[0]?.artUrl}
-                  alt=""
-                  className="h-20 w-20 sm:h-24 sm:w-24"
-                  rounded="xl"
-                  icon={<ListMusic className="h-7 w-7 sm:h-8 sm:w-8" aria-hidden />}
-                />
-                <div className="min-w-0">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted">Playlist</p>
-                  <h2 className="truncate text-2xl font-semibold">{selectedPlaylist.title}</h2>
-                  <p className="text-sm text-muted">
-                    {trackCount} {trackCount === 1 ? 'track' : 'tracks'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button className="btn btn-primary" type="button" onClick={() => void playAll(false)}>Play</button>
-                <button className="btn btn-secondary" type="button" onClick={() => void playAll(true)}>Shuffle</button>
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => openForPlaylist(selectedPlaylist)}
-                >
-                  Add tracks
-                </button>
-                <button className="btn btn-secondary" type="button" onClick={openRename}>Rename</button>
-                <button className="btn btn-secondary" type="button" onClick={openDelete}>Delete</button>
-              </div>
-            </div>
+          <>
+            <PlaylistHero
+              playlist={selectedPlaylist}
+              coverArtUrl={selectedPlaylist.artUrl ?? tracks.items[0]?.artUrl}
+              trackCount={trackCount}
+              isEmpty={trackCount === 0 && tracks.items.length === 0 && !tracks.loading}
+              onPlay={() => void playAll(false)}
+              onShuffle={() => void playAll(true)}
+              onAddTracks={() => openForPlaylist(selectedPlaylist)}
+              onRename={openRename}
+              onDelete={openDelete}
+            />
 
             {tracks.loading && tracks.items.length === 0 && (
               <SkeletonStack count={8} label="Loading tracks">
                 {(index) => <TrackRowSkeleton key={index} index={index + 1} />}
               </SkeletonStack>
             )}
+
             {tracks.error && tracks.items.length === 0 && (
               <p className="text-sm text-danger" role="alert">{tracks.error}</p>
             )}
 
-            <ol
-              ref={tracksScrollRef}
-              data-testid="playlist-tracks"
-              className={`space-y-1.5 lg:overflow-y-auto ${trackListMaxHeight}`}
-            >
-              {tracks.items.map((track, index) => (
-                <li key={track.playlistItemId ?? track.ratingKey}>
-                  <TrackRow
-                    track={track}
-                    index={index + 1}
-                    onPlay={() => player.playTracks([track])}
-                    actions={
-                      <>
-                        <AddToPlaylistButton track={track} />
-                        <button
-                          className="player-icon-btn h-9 w-9"
-                          type="button"
-                          aria-label="Move up"
-                          title="Move up"
-                          onClick={() => void moveTrack(index, -1)}
-                          disabled={index === 0}
-                        >
-                          <ArrowUp className="h-4 w-4" aria-hidden />
-                        </button>
-                        <button
-                          className="player-icon-btn h-9 w-9"
-                          type="button"
-                          aria-label="Move down"
-                          title="Move down"
-                          onClick={() => void moveTrack(index, 1)}
-                          disabled={index === tracks.items.length - 1 && !tracks.hasMore}
-                        >
-                          <ArrowDown className="h-4 w-4" aria-hidden />
-                        </button>
-                        {track.playlistItemId && (
-                          <button
-                            className="player-icon-btn h-9 w-9 hover:text-danger"
-                            type="button"
-                            aria-label={`Remove ${track.title}`}
-                            title="Remove"
-                            onClick={() => openRemoveTrack(track)}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden />
-                          </button>
-                        )}
-                      </>
-                    }
-                  />
-                </li>
-              ))}
-              <li>
-                <InfiniteListBoundary
-                  hasMore={tracks.hasMore}
-                  loading={tracks.loading}
-                  loadingMore={tracks.loadingMore}
-                  error={tracks.error && tracks.items.length > 0 ? tracks.error : ''}
-                  onLoadMore={tracks.loadMore}
-                  onRetry={tracks.retry}
-                  rootRef={tracksScrollRef}
-                  endLabel={tracks.items.length > 0 ? `${tracks.items.length} tracks loaded` : undefined}
-                />
-              </li>
-            </ol>
-          </div>
+            {tracks.items.length > 0 && (
+              <PlaylistTracksList
+                playlistKey={selected}
+                tracks={tracks}
+                playingRatingKey={player.current?.ratingKey}
+                onPlayTrack={(track) => void player.playTracks([track])}
+                onRemoveTrack={openRemoveTrack}
+                onReorderError={setActionError}
+              />
+            )}
+          </>
         ) : (
-          <p className="text-muted">Select a playlist to manage tracks.</p>
+          <div className="card flex min-h-[16rem] flex-col items-center justify-center p-8 text-center">
+            <ListMusic className="h-12 w-12 text-muted" aria-hidden />
+            <h2 className="mt-4 text-lg font-semibold">Choose a playlist</h2>
+            <p className="mt-2 max-w-sm text-sm text-muted">
+              Select a playlist from the rail to view tracks, or create a new one to get started.
+            </p>
+            <button type="button" className="btn btn-primary mt-4" onClick={openCreateDialog}>
+              Create playlist
+            </button>
+          </div>
         )}
       </section>
 
-      {dialog === 'rename' && selectedPlaylist && (
+      <ConfirmDialog
+        open={dialog === 'create'}
+        title="Create playlist"
+        description="Give your playlist a name."
+        input={{
+          label: 'Playlist name',
+          value: createTitle,
+          onChange: setCreateTitle,
+          placeholder: 'Playlist name',
+        }}
+        confirmLabel="Create"
+        busy={dialogBusy}
+        confirmDisabled={!createTitle.trim()}
+        onConfirm={createPlaylist}
+        onCancel={closeDialog}
+      />
+
+      {selectedPlaylist ? (
         <ConfirmDialog
+          open={dialog === 'rename'}
           title="Rename playlist"
           description={<>Enter a new name for &ldquo;{selectedPlaylist.title}&rdquo;.</>}
           input={{
@@ -383,10 +389,11 @@ export function PlaylistsPage() {
           onConfirm={renamePlaylist}
           onCancel={closeDialog}
         />
-      )}
+      ) : null}
 
-      {dialog === 'delete' && selectedPlaylist && (
+      {selectedPlaylist ? (
         <ConfirmDialog
+          open={dialog === 'delete'}
           title="Delete playlist"
           description={
             <>
@@ -403,10 +410,11 @@ export function PlaylistsPage() {
           onConfirm={deletePlaylist}
           onCancel={closeDialog}
         />
-      )}
+      ) : null}
 
-      {dialog === 'removeTrack' && trackToRemove && selectedPlaylist && (
+      {trackToRemove && selectedPlaylist ? (
         <ConfirmDialog
+          open={dialog === 'removeTrack'}
           title="Remove track"
           description={
             <>
@@ -419,7 +427,7 @@ export function PlaylistsPage() {
           onConfirm={confirmRemoveTrack}
           onCancel={closeDialog}
         />
-      )}
+      ) : null}
     </div>
   );
 }

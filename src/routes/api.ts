@@ -13,6 +13,7 @@ import {
   getPlexOAuthStatus,
   listPlexServers,
   loadLibrariesForCurrentPlex,
+  requirePlexConnected,
   selectPlexServer,
   startPlexOAuth,
 } from '../plex/auth.js';
@@ -21,11 +22,16 @@ import { runAlexaEventsCleanup } from '../services/eventRetention.js';
 import { getAlexaEventsAfter, getAlexaEventsPage, updateAdminPassword, verifyAdmin } from '../db/index.js';
 import {
   advanceQueue,
+  clearQueue,
   createQueueFromTracks,
   getCurrentTrack,
   loadQueue,
   previousTrack,
+  removeQueueItem,
+  reorderQueueItems,
   saveQueue,
+  setQueueLoop,
+  setQueueShuffle,
 } from '../services/playback.js';
 import { artUrlForTrack } from '../media/gateway.js';
 
@@ -184,12 +190,6 @@ function getSectionKey(): string | null {
   return getPublicSettings().musicLibraryId;
 }
 
-async function ensurePlexConnected(): Promise<void> {
-  const creds = getPlexCredentials();
-  if (!creds) throw new Error('Plex not configured');
-  await plexAdapter.connect(creds.url, creds.token);
-}
-
 function withArtUrl<T extends { ratingKey: string; thumb?: string }>(item: T): T & { artUrl?: string } {
   return {
     ...item,
@@ -236,7 +236,7 @@ apiRouter.get('/library/artists', asyncHandler(async (req, res) => {
     res.status(400).json({ error: 'Music library not configured' });
     return;
   }
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const { start, size, sort } = parsePageQuery(req.query as Record<string, unknown>);
   const page = await plexAdapter.listArtistsPage(sectionKey, { start, size, sort });
   res.json(pageResponse(page));
@@ -248,7 +248,7 @@ apiRouter.get('/library/albums', asyncHandler(async (req, res) => {
     res.status(400).json({ error: 'Music library not configured' });
     return;
   }
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const { start, size, sort } = parsePageQuery(req.query as Record<string, unknown>);
   const page = await plexAdapter.listAlbumsPage(sectionKey, { start, size, sort });
   res.json(pageResponse(page));
@@ -260,7 +260,7 @@ apiRouter.get('/library/tracks', asyncHandler(async (req, res) => {
     res.status(400).json({ error: 'Music library not configured' });
     return;
   }
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const { start, size, sort } = parsePageQuery(req.query as Record<string, unknown>);
   const page = await plexAdapter.listTracksPage(sectionKey, { start, size, sort });
   res.json(pageResponse(page));
@@ -273,7 +273,7 @@ apiRouter.get('/search', asyncHandler(async (req, res) => {
     res.status(400).json({ error: 'Query and music library required' });
     return;
   }
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const typeRaw = typeof req.query.type === 'string' ? req.query.type : undefined;
   if (typeRaw && SEARCH_TYPES.has(typeRaw)) {
     const { start, size } = parsePageQuery(req.query as Record<string, unknown>);
@@ -296,7 +296,7 @@ apiRouter.get('/search', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.get('/artists/:key', asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const artist = await plexAdapter.getArtist(String(req.params.key));
   if (!artist) {
     res.status(404).json({ error: 'Artist not found' });
@@ -312,7 +312,7 @@ apiRouter.get('/artists/:key', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.get('/albums/:key', asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const album = await plexAdapter.getAlbum(String(req.params.key));
   if (!album) {
     res.status(404).json({ error: 'Album not found' });
@@ -328,7 +328,7 @@ apiRouter.get('/albums/:key', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.get('/tracks/:key', asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const track = await plexAdapter.getTrack(String(req.params.key));
   if (!track) {
     res.status(404).json({ error: 'Track not found' });
@@ -338,7 +338,7 @@ apiRouter.get('/tracks/:key', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.get('/albums/:key/tracks', asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const all = req.query.all === '1' || req.query.all === 'true';
   if (all) {
     const tracks = await plexAdapter.getAlbumTracks(String(req.params.key));
@@ -351,7 +351,7 @@ apiRouter.get('/albums/:key/tracks', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.get('/artists/:key/albums', asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const all = req.query.all === '1' || req.query.all === 'true';
   if (all) {
     const albums = await plexAdapter.getArtistAlbums(String(req.params.key));
@@ -364,7 +364,7 @@ apiRouter.get('/artists/:key/albums', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.get('/artists/:key/tracks', asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const all = req.query.all === '1' || req.query.all === 'true';
   if (all) {
     const tracks = await plexAdapter.getArtistTracks(String(req.params.key));
@@ -377,7 +377,7 @@ apiRouter.get('/artists/:key/tracks', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.get('/playlists', asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const all = req.query.all === '1' || req.query.all === 'true';
   if (all) {
     const playlists = await plexAdapter.listPlaylists();
@@ -390,7 +390,7 @@ apiRouter.get('/playlists', asyncHandler(async (req, res) => {
 }));
 
 apiRouter.get('/playlists/:key/tracks', asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const all = req.query.all === '1' || req.query.all === 'true';
   if (all) {
     const tracks = await plexAdapter.getPlaylistTracks(String(req.params.key));
@@ -413,7 +413,7 @@ apiRouter.post('/playlists', requireCsrf, asyncHandler(async (req, res) => {
     res.status(400).json({ error: 'trackKeys required' });
     return;
   }
-  await ensurePlexConnected();
+  await requirePlexConnected();
   const playlist = await plexAdapter.createPlaylist(title.trim(), keys ?? []);
   res.json(withArtUrl(playlist));
 }));
@@ -424,13 +424,13 @@ apiRouter.patch('/playlists/:key', requireCsrf, asyncHandler(async (req, res) =>
     res.status(400).json({ error: 'Title required' });
     return;
   }
-  await ensurePlexConnected();
+  await requirePlexConnected();
   await plexAdapter.renamePlaylist(String(req.params.key), title);
   res.json({ ok: true });
 }));
 
 apiRouter.delete('/playlists/:key', requireCsrf, asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   await plexAdapter.deletePlaylist(String(req.params.key));
   res.json({ ok: true });
 }));
@@ -442,13 +442,13 @@ apiRouter.post('/playlists/:key/tracks', requireCsrf, asyncHandler(async (req, r
     res.status(400).json({ error: 'trackKeys required' });
     return;
   }
-  await ensurePlexConnected();
+  await requirePlexConnected();
   await plexAdapter.addTracksToPlaylist(String(req.params.key), keys);
   res.json({ ok: true });
 }));
 
 apiRouter.delete('/playlists/:key/tracks/:itemId', requireCsrf, asyncHandler(async (req, res) => {
-  await ensurePlexConnected();
+  await requirePlexConnected();
   await plexAdapter.removePlaylistItem(String(req.params.key), String(req.params.itemId));
   res.json({ ok: true });
 }));
@@ -462,7 +462,7 @@ apiRouter.post('/playlists/:key/reorder', requireCsrf, asyncHandler(async (req, 
     res.status(400).json({ error: 'playlistItemId required' });
     return;
   }
-  await ensurePlexConnected();
+  await requirePlexConnected();
   await plexAdapter.reorderPlaylistItem(
     String(req.params.key),
     playlistItemId,
@@ -490,7 +490,7 @@ apiRouter.post('/player/queue', requireCsrf, asyncHandler(async (req: AuthReques
 
   let enriched = tracks;
   if (tracks.some((track) => !track.thumb)) {
-    await ensurePlexConnected();
+    await requirePlexConnected();
     enriched = await Promise.all(
       tracks.map(async (track) => {
         if (track.thumb) return track;
@@ -559,5 +559,68 @@ apiRouter.post('/player/jump', requireCsrf, (req: AuthRequest, res) => {
   }
   queue.currentIndex = index;
   saveQueue(queue);
+  res.json({ queue, current: getCurrentTrack(queue) });
+});
+
+apiRouter.post('/player/queue/remove', requireCsrf, (req: AuthRequest, res) => {
+  const { index } = req.body as { index?: number };
+  const userId = req.sessionId ?? 'web';
+  const queue = loadQueue(userId);
+  if (!queue || index === undefined || index < 0 || index >= queue.items.length) {
+    res.status(400).json({ error: 'Invalid queue index' });
+    return;
+  }
+  const current = removeQueueItem(queue, index);
+  const reloaded = loadQueue(userId);
+  res.json({ queue: reloaded, current });
+});
+
+apiRouter.post('/player/queue/reorder', requireCsrf, (req: AuthRequest, res) => {
+  const { fromIndex, toIndex } = req.body as { fromIndex?: number; toIndex?: number };
+  const userId = req.sessionId ?? 'web';
+  const queue = loadQueue(userId);
+  if (
+    !queue
+    || fromIndex === undefined
+    || toIndex === undefined
+    || fromIndex < 0
+    || toIndex < 0
+    || fromIndex >= queue.items.length
+    || toIndex >= queue.items.length
+  ) {
+    res.status(400).json({ error: 'Invalid reorder indices' });
+    return;
+  }
+  reorderQueueItems(queue, fromIndex, toIndex);
+  res.json({ queue, current: getCurrentTrack(queue) });
+});
+
+apiRouter.post('/player/queue/clear', requireCsrf, (req: AuthRequest, res) => {
+  const userId = req.sessionId ?? 'web';
+  clearQueue(userId);
+  res.json({ queue: null, current: null });
+});
+
+apiRouter.post('/player/queue/shuffle', requireCsrf, (req: AuthRequest, res) => {
+  const { enabled } = req.body as { enabled?: boolean };
+  const userId = req.sessionId ?? 'web';
+  const queue = loadQueue(userId);
+  if (!queue || enabled === undefined) {
+    res.status(400).json({ error: 'Invalid shuffle request' });
+    return;
+  }
+  setQueueShuffle(queue, enabled);
+  res.json({ queue, current: getCurrentTrack(queue) });
+});
+
+apiRouter.post('/player/queue/loop', requireCsrf, (req: AuthRequest, res) => {
+  const { enabled } = req.body as { enabled?: boolean };
+  const userId = req.sessionId ?? 'web';
+  const queue = loadQueue(userId);
+  if (!queue || enabled === undefined) {
+    res.status(400).json({ error: 'Invalid loop request' });
+    return;
+  }
+  setQueueLoop(queue, enabled);
   res.json({ queue, current: getCurrentTrack(queue) });
 });

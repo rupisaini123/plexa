@@ -1,8 +1,10 @@
 export function adjustScrollForPrependedRows(
   scrollEl: HTMLElement | null,
-  addedCount: number,
-  rowHeight: number,
+  previousScrollHeight: number,
 ): void {
-  if (!scrollEl || addedCount <= 0) return;
-  scrollEl.scrollTop += addedCount * rowHeight;
+  if (!scrollEl || previousScrollHeight <= 0) return;
+  const delta = scrollEl.scrollHeight - previousScrollHeight;
+  if (delta > 0) {
+    scrollEl.scrollTop += delta;
+  }
 }

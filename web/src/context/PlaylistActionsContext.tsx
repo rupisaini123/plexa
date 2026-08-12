@@ -10,9 +10,7 @@ import type { PlaylistSummary, TrackItem } from '../lib/api';
 import { AddToPlaylistDialog } from '../components/AddToPlaylistDialog';
 import { AddTracksSearchDialog } from '../components/AddTracksSearchDialog';
 
-type DialogState =
-  | { kind: 'pickPlaylist'; track: TrackItem }
-  | { kind: 'searchTracks'; playlist: PlaylistSummary };
+type DialogKind = 'pickPlaylist' | 'searchTracks' | null;
 
 interface PlaylistActionsValue {
   openForTrack: (track: TrackItem) => void;
@@ -23,16 +21,26 @@ interface PlaylistActionsValue {
 const PlaylistActionsContext = createContext<PlaylistActionsValue | null>(null);
 
 export function PlaylistActionsProvider({ children }: { children: ReactNode }) {
-  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [dialogKind, setDialogKind] = useState<DialogKind>(null);
+  const [pickTrack, setPickTrack] = useState<TrackItem | null>(null);
+  const [searchPlaylist, setSearchPlaylist] = useState<PlaylistSummary | null>(null);
   const [revision, setRevision] = useState(0);
   const [announcement, setAnnouncement] = useState('');
   const lastFocusRef = useRef<HTMLElement | null>(null);
 
   const close = useCallback(() => {
-    setDialog(null);
+    setDialogKind(null);
     const target = lastFocusRef.current;
     lastFocusRef.current = null;
     target?.focus();
+  }, []);
+
+  const clearPickTrack = useCallback(() => {
+    setPickTrack(null);
+  }, []);
+
+  const clearSearchPlaylist = useCallback(() => {
+    setSearchPlaylist(null);
   }, []);
 
   const announce = useCallback((message: string) => {
@@ -48,14 +56,16 @@ export function PlaylistActionsProvider({ children }: { children: ReactNode }) {
     lastFocusRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    setDialog({ kind: 'pickPlaylist', track });
+    setPickTrack(track);
+    setDialogKind('pickPlaylist');
   }, []);
 
   const openForPlaylist = useCallback((playlist: PlaylistSummary) => {
     lastFocusRef.current = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    setDialog({ kind: 'searchTracks', playlist });
+    setSearchPlaylist(playlist);
+    setDialogKind('searchTracks');
   }, []);
 
   return (
@@ -64,18 +74,22 @@ export function PlaylistActionsProvider({ children }: { children: ReactNode }) {
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement}
       </div>
-      {dialog?.kind === 'pickPlaylist' ? (
+      {pickTrack ? (
         <AddToPlaylistDialog
-          track={dialog.track}
+          open={dialogKind === 'pickPlaylist'}
+          track={pickTrack}
           onClose={close}
           onSuccess={handleSuccess}
+          onExitComplete={clearPickTrack}
         />
       ) : null}
-      {dialog?.kind === 'searchTracks' ? (
+      {searchPlaylist ? (
         <AddTracksSearchDialog
-          playlist={dialog.playlist}
+          open={dialogKind === 'searchTracks'}
+          playlist={searchPlaylist}
           onClose={close}
           onSuccess={handleSuccess}
+          onExitComplete={clearSearchPlaylist}
         />
       ) : null}
     </PlaylistActionsContext.Provider>

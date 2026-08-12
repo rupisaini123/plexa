@@ -2,6 +2,7 @@ import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { getEnv, signPayload } from '../config/index.js';
 import { getPublicBaseUrl } from '../services/settings.js';
+import { requirePlexConnected } from '../plex/auth.js';
 import { plexAdapter } from '../plex/adapter.js';
 import { logger } from '../logger.js';
 
@@ -158,7 +159,7 @@ async function proxyUrl(
   targetUrl: string,
   req: Request,
   res: Response,
-  options: { requireOk?: boolean } = {},
+  options: { requireOk?: boolean; cacheMaxAge?: number } = {},
 ): Promise<void> {
   const controller = new AbortController();
   const onClose = () => controller.abort();
@@ -188,6 +189,10 @@ async function proxyUrl(
         res.setHeader(key, value);
       }
     });
+
+    if (options.cacheMaxAge !== undefined) {
+      res.setHeader('cache-control', `public, max-age=${options.cacheMaxAge}, immutable`);
+    }
 
     if (req.method === 'HEAD' || !upstream.body) {
       res.end();
@@ -294,6 +299,7 @@ export async function handleMediaRequest(req: Request, res: Response): Promise<v
   }
 
   try {
+    await requirePlexConnected();
     const delivery = await resolveAudioDelivery(payload.ratingKey, payload.transcode);
     if (delivery.mode === 'hls') {
       await serveHlsManifest(delivery.url, req, res);
@@ -301,12 +307,16 @@ export async function handleMediaRequest(req: Request, res: Response): Promise<v
     }
     await proxyUrl(delivery.url, req, res);
   } catch (err) {
+    const message = (err as Error).message;
     const isNotFound =
       (err as Error).name === 'NotFoundError' ||
-      (err as Error).message?.includes('Unable to find item');
+      message?.includes('Unable to find item');
+    const isNotConfigured = message === 'Plex not configured';
     logger.error({ err }, 'Media proxy failed');
     if (!res.headersSent) {
-      res.status(isNotFound ? 404 : 500).send(isNotFound ? 'Not found' : 'Proxy error');
+      if (isNotFound) res.status(404).send('Not found');
+      else if (isNotConfigured) res.status(503).send('Plex not configured');
+      else res.status(500).send('Proxy error');
     }
   }
 }
@@ -324,6 +334,7 @@ export async function handleSegmentRequest(req: Request, res: Response): Promise
   }
 
   try {
+    await requirePlexConnected();
     const targetUrl = plexAdapter.buildDirectStreamUrl(payload.path);
     if (isHlsUrl(targetUrl)) {
       await serveHlsManifest(targetUrl, req, res);
@@ -331,8 +342,12 @@ export async function handleSegmentRequest(req: Request, res: Response): Promise
     }
     await proxyUrl(targetUrl, req, res);
   } catch (err) {
+    const message = (err as Error).message;
     logger.error({ err }, 'Segment proxy failed');
-    if (!res.headersSent) res.status(500).send('Proxy error');
+    if (!res.headersSent) {
+      if (message === 'Plex not configured') res.status(503).send('Plex not configured');
+      else res.status(500).send('Proxy error');
+    }
   }
 }
 
@@ -353,11 +368,16 @@ export async function handleArtworkRequest(req: Request, res: Response): Promise
   }
 
   try {
+    await requirePlexConnected();
     const artUrl = plexAdapter.buildArtworkUrl(payload.thumb);
-    await proxyUrl(artUrl, req, res, { requireOk: true });
+    await proxyUrl(artUrl, req, res, { requireOk: true, cacheMaxAge: MEDIA_TTL_SEC });
   } catch (err) {
+    const message = (err as Error).message;
     logger.error({ err }, 'Artwork proxy failed');
-    if (!res.headersSent) res.status(500).send('Proxy error');
+    if (!res.headersSent) {
+      if (message === 'Plex not configured') res.status(503).send('Plex not configured');
+      else res.status(500).send('Proxy error');
+    }
   }
 }
 

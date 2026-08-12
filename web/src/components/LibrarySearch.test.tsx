@@ -224,7 +224,9 @@ describe('LibrarySearch', () => {
     await user.click(screen.getByRole('button', { name: /Clear search/i }));
 
     expect(input).toHaveValue('');
-    expect(screen.queryByRole('dialog', { name: /Search results/i })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /Search results/i })).not.toBeInTheDocument();
+    });
     expect(screen.queryByText(/No results/i)).not.toBeInTheDocument();
   });
 
@@ -262,7 +264,9 @@ describe('LibrarySearch', () => {
     await waitFor(() => {
       expect(input).toHaveValue('');
     });
-    expect(screen.queryByRole('dialog', { name: /Search results/i })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /Search results/i })).not.toBeInTheDocument();
+    });
   });
 
   it('shows add-to-playlist on track search results', async () => {

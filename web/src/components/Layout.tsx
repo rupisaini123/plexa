@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   LayoutDashboard,
   Library,
@@ -15,6 +16,8 @@ import {
 import { usePlayer } from '../context/PlayerContext';
 import { useTheme } from '../context/ThemeContext';
 import { logout } from '../lib/api';
+import { fadeUp, modalBackdrop, pageOverlayTransition, pageTransitionEase, springSoft, useAppReducedMotion } from '../lib/motion';
+import { AppTooltip, tooltipProps } from '../lib/tooltip';
 import { PlayerBar } from './PlayerBar';
 import { QueuePanel } from './QueuePanel';
 
@@ -62,7 +65,7 @@ function ThemeToggle() {
       className="theme-toggle"
       onClick={cycleTheme}
       aria-label={`Theme: ${themeLabels[theme]}`}
-      title={`Theme: ${themeLabels[theme]}`}
+      {...tooltipProps(`Theme: ${themeLabels[theme]}`, 'bottom')}
     >
       <ThemeIcon aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
     </button>
@@ -71,6 +74,8 @@ function ThemeToggle() {
 
 export function Layout({ onLogout }: { onLogout: () => void }) {
   const player = usePlayer();
+  const location = useLocation();
+  const reducedMotion = useAppReducedMotion();
   const isCompactNav = useCompactNav();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId();
@@ -131,7 +136,7 @@ export function Layout({ onLogout }: { onLogout: () => void }) {
                     end={link.to === '/'}
                     className={({ isActive }) =>
                       `nav-pill ${isActive ? 'nav-pill-active' : ''}`}
-                    title={link.label}
+                    {...tooltipProps(link.label, 'bottom')}
                   >
                     <Icon aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={2} />
                     <span className="hidden xl:inline">{link.label}</span>
@@ -148,7 +153,7 @@ export function Layout({ onLogout }: { onLogout: () => void }) {
               onClick={handleLogout}
               type="button"
               aria-label="Log out"
-              title="Log out"
+              {...tooltipProps('Log out', 'bottom')}
             >
               <LogOut aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
             </button>
@@ -161,6 +166,7 @@ export function Layout({ onLogout }: { onLogout: () => void }) {
               aria-expanded={menuOpen}
               aria-controls={menuId}
               aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              {...tooltipProps(menuOpen ? 'Close menu' : 'Open menu', 'bottom')}
               onClick={() => setMenuOpen((open) => !open)}
             >
               {menuOpen ? (
@@ -172,60 +178,94 @@ export function Layout({ onLogout }: { onLogout: () => void }) {
           ) : null}
         </div>
 
-        {isCompactNav && menuOpen ? (
-          <>
-            <button
-              type="button"
-              className="nav-mobile-backdrop"
-              aria-label="Dismiss menu"
-              onClick={closeMenu}
-            />
-            <div
-              id={menuId}
-              className="nav-mobile nav-mobile-open"
-            >
-              <div className="nav-mobile-panel">
-                <nav className="flex flex-col gap-1 p-2" aria-label="Mobile">
-                  {links.map((link) => {
-                    const Icon = link.icon;
-                    return (
-                      <NavLink
-                        key={link.to}
-                        to={link.to}
-                        end={link.to === '/'}
-                        onClick={closeMenu}
-                        className={({ isActive }) =>
-                          `nav-mobile-link ${isActive ? 'nav-mobile-link-active' : ''}`}
-                      >
-                        <Icon aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={2} />
-                        <span>{link.label}</span>
-                      </NavLink>
-                    );
-                  })}
-                </nav>
-                <div className="flex items-center gap-2 border-t border-white/10 p-2">
-                  <ThemeToggle />
-                  <button
-                    className="btn btn-secondary inline-flex flex-1 items-center justify-center gap-2"
-                    onClick={handleLogout}
-                    type="button"
-                  >
-                    <LogOut aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
-                    Log out
-                  </button>
+        <AnimatePresence>
+          {isCompactNav && menuOpen ? (
+            <>
+              <motion.button
+                key="nav-mobile-backdrop"
+                type="button"
+                className="nav-mobile-backdrop"
+                aria-label="Dismiss menu"
+                {...tooltipProps('Dismiss menu')}
+                onClick={closeMenu}
+                variants={modalBackdrop}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={springSoft}
+              />
+              <motion.div
+                key="nav-mobile-panel"
+                id={menuId}
+                className="nav-mobile"
+                variants={fadeUp}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={springSoft}
+              >
+                <div className="nav-mobile-panel">
+                  <nav className="flex flex-col gap-1 p-2" aria-label="Mobile">
+                    {links.map((link) => {
+                      const Icon = link.icon;
+                      return (
+                        <NavLink
+                          key={link.to}
+                          to={link.to}
+                          end={link.to === '/'}
+                          onClick={closeMenu}
+                          className={({ isActive }) =>
+                            `nav-mobile-link ${isActive ? 'nav-mobile-link-active' : ''}`}
+                        >
+                          <Icon aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={2} />
+                          <span>{link.label}</span>
+                        </NavLink>
+                      );
+                    })}
+                  </nav>
+                  <div className="flex items-center gap-2 border-t border-white/10 p-2">
+                    <ThemeToggle />
+                    <button
+                      className="btn btn-secondary inline-flex flex-1 items-center justify-center gap-2"
+                      onClick={handleLogout}
+                      type="button"
+                    >
+                      <LogOut aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
+                      Log out
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </>
-        ) : null}
+              </motion.div>
+            </>
+          ) : null}
+        </AnimatePresence>
       </header>
 
       <main className="app-gutter py-6">
-        <Outlet />
+        {reducedMotion ? (
+          <Outlet />
+        ) : (
+          <div className="page-outlet-stack grid [&>*]:col-start-1 [&>*]:row-start-1">
+            <AnimatePresence>
+              <motion.div
+                key={location.pathname}
+                className="col-start-1 row-start-1 w-full bg-surface"
+                variants={pageOverlayTransition}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransitionEase}
+              >
+                <Outlet />
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        )}
       </main>
 
       <PlayerBar />
       <QueuePanel />
+      <AppTooltip />
     </div>
   );
 }

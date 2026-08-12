@@ -202,6 +202,56 @@ export function setQueueLoop(queue: PlaybackQueue, loop: boolean): void {
   saveQueue(queue);
 }
 
+export function removeQueueItem(queue: PlaybackQueue, index: number): QueueItem | null {
+  if (index < 0 || index >= queue.items.length) return getCurrentTrack(queue);
+
+  const wasCurrent = index === queue.currentIndex;
+  queue.items.splice(index, 1);
+
+  if (queue.items.length === 0) {
+    clearQueue(queue.userId, queue.deviceId);
+    return null;
+  }
+
+  if (index < queue.currentIndex) {
+    queue.currentIndex -= 1;
+  } else if (wasCurrent && queue.currentIndex >= queue.items.length) {
+    queue.currentIndex = queue.items.length - 1;
+  }
+
+  saveQueue(queue);
+  return getCurrentTrack(queue);
+}
+
+export function reorderQueueItems(queue: PlaybackQueue, fromIndex: number, toIndex: number): void {
+  if (fromIndex === toIndex) return;
+  if (fromIndex < 0 || fromIndex >= queue.items.length) return;
+  if (toIndex < 0 || toIndex >= queue.items.length) return;
+
+  const currentToken = queue.items[queue.currentIndex]?.streamToken;
+  const [moved] = queue.items.splice(fromIndex, 1);
+  queue.items.splice(toIndex, 0, moved);
+
+  if (currentToken) {
+    const newIndex = queue.items.findIndex((item) => item.streamToken === currentToken);
+    if (newIndex >= 0) queue.currentIndex = newIndex;
+  }
+
+  saveQueue(queue);
+}
+
+export function setQueueShuffle(queue: PlaybackQueue, enabled: boolean): void {
+  if (queue.shuffle === enabled) return;
+  queue.shuffle = enabled;
+  if (enabled && queue.items.length > 1) {
+    const current = queue.currentIndex;
+    const head = queue.items.slice(0, current + 1);
+    const tail = shuffleArray(queue.items.slice(current + 1));
+    queue.items = [...head, ...tail];
+  }
+  saveQueue(queue);
+}
+
 export function clampSeekOffset(
   currentMs: number,
   deltaMs: number,

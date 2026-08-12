@@ -11,7 +11,7 @@ import {
   updateSettings,
   type PlexOAuthRow,
 } from '../db/index.js';
-import { getPlexAccountToken } from '../services/settings.js';
+import { getPlexAccountToken, getPlexCredentials } from '../services/settings.js';
 import { plexAdapter } from './adapter.js';
 
 export interface PlexOAuthStart {
@@ -202,16 +202,20 @@ export function disconnectPlex(): void {
   });
 }
 
-export async function loadLibrariesForCurrentPlex(): Promise<{ key: string; title: string; type: string }[]> {
-  const creds = await ensureConnectedFromSettings();
-  if (!creds) return [];
-  return plexAdapter.listLibraries();
-}
-
-async function ensureConnectedFromSettings(): Promise<{ url: string; token: string } | null> {
-  const { getPlexCredentials } = await import('../services/settings.js');
+export async function ensurePlexConnectedFromSettings(): Promise<{ url: string; token: string } | null> {
   const creds = getPlexCredentials();
   if (!creds) return null;
   await plexAdapter.connect(creds.url, creds.token);
   return creds;
+}
+
+export async function requirePlexConnected(): Promise<void> {
+  const creds = await ensurePlexConnectedFromSettings();
+  if (!creds) throw new Error('Plex not configured');
+}
+
+export async function loadLibrariesForCurrentPlex(): Promise<{ key: string; title: string; type: string }[]> {
+  const creds = await ensurePlexConnectedFromSettings();
+  if (!creds) return [];
+  return plexAdapter.listLibraries();
 }

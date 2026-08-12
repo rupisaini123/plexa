@@ -27,6 +27,7 @@ vi.mock('@tanstack/react-virtual', () => ({
       key: index,
     })),
     getTotalSize: () => count * 44,
+    measureElement: vi.fn(),
   }),
 }));
 
@@ -56,6 +57,20 @@ describe('ActivityFeed', () => {
     render(<ActivityFeed />);
     expect(screen.getByText('Opened Plexa')).toBeInTheDocument();
     expect(screen.getByText('Playing playlist "Road Trip" (42 tracks)')).toBeInTheDocument();
+  });
+
+  it('wraps long summary text for small screens', () => {
+    mockState.items = [
+      {
+        id: 1,
+        event_type: 'PlaybackFinished',
+        summary: 'Finished "SHABAD HAZARE (BHAI RAVINDER SINGH)" by Various Artists',
+        created_at: '2026-08-12 03:27:19',
+      },
+    ];
+    render(<ActivityFeed />);
+    const summary = screen.getByText('Finished "SHABAD HAZARE (BHAI RAVINDER SINGH)" by Various Artists');
+    expect(summary).toHaveClass('min-w-0', 'break-words');
   });
 
   it('loads more when boundary button is clicked', async () => {

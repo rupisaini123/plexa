@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
+import { motion } from 'motion/react';
 import { Play } from 'lucide-react';
 import type { TrackItem } from '../lib/api';
+import { tapScale } from '../lib/motion';
+import { tooltipProps } from '../lib/tooltip';
 import { Artwork } from './Artwork';
 import { MarqueeText } from './MarqueeText';
 
@@ -75,15 +78,16 @@ export function TrackRow({
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         {onPlay && (
-          <button
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/25 transition hover:bg-accent-hover hover:scale-105 active:scale-95 sm:h-10 sm:w-10"
+          <motion.button
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white shadow-md shadow-accent/25 hover:bg-accent-hover sm:h-10 sm:w-10"
             type="button"
             aria-label={`Play ${track.title}`}
-            title="Play"
+            {...tooltipProps('Play')}
             onClick={onPlay}
+            {...tapScale}
           >
             <Play className="h-4 w-4 translate-x-px" fill="currentColor" aria-hidden />
-          </button>
+          </motion.button>
         )}
         {actions}
       </div>

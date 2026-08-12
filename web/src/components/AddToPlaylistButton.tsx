@@ -1,5 +1,6 @@
 import { ListPlus } from 'lucide-react';
 import type { TrackItem } from '../lib/api';
+import { tooltipProps } from '../lib/tooltip';
 import { usePlaylistActions } from '../context/PlaylistActionsContext';
 
 interface AddToPlaylistButtonProps {
@@ -12,10 +13,10 @@ export function AddToPlaylistButton({ track, className }: AddToPlaylistButtonPro
 
   return (
     <button
-      className={className ?? 'player-icon-btn h-9 w-9'}
+      className={className ? `player-icon-btn ${className}` : 'player-icon-btn h-9 w-9'}
       type="button"
       aria-label={`Add ${track.title} to playlist`}
-      title="Add to playlist"
+      {...tooltipProps('Add to playlist')}
       onClick={() => openForTrack(track)}
     >
       <ListPlus className="h-4 w-4" aria-hidden />
