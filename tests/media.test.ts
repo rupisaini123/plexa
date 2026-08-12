@@ -176,11 +176,10 @@ describe('signed media urls', () => {
     } as unknown as import('express').Request;
 
     const headers: Record<string, string> = {};
+    const state = { statusCode: 200, writableEnded: false };
     const res = {
-      statusCode: 200,
-      writableEnded: false,
       status(code: number) {
-        this.statusCode = code;
+        state.statusCode = code;
         return this;
       },
       setHeader(key: string, value: string) {
@@ -191,7 +190,7 @@ describe('signed media urls', () => {
         return this;
       },
       end() {
-        this.writableEnded = true;
+        state.writableEnded = true;
         return this;
       },
       write() {
@@ -294,18 +293,17 @@ describe('media proxy reconnect', () => {
       off() {},
     } as unknown as import('express').Request;
 
+    const state = { statusCode: 200, writableEnded: false };
     const res = {
-      statusCode: 200,
-      writableEnded: false,
       status(code: number) {
-        this.statusCode = code;
+        state.statusCode = code;
         return this;
       },
       setHeader() {
         return this;
       },
       end() {
-        this.writableEnded = true;
+        state.writableEnded = true;
         return this;
       },
       write() {
@@ -318,7 +316,7 @@ describe('media proxy reconnect', () => {
 
     expect(requirePlexConnected).toHaveBeenCalled();
     expect(plexAdapter.getMediaParts).toHaveBeenCalledWith('12345');
-    expect(res.statusCode).toBe(200);
+    expect(state.statusCode).toBe(200);
   });
 
   it('returns 503 when Plex is not configured', async () => {
