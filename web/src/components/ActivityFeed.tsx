@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { InfiniteListBoundary } from './InfiniteListBoundary';
 import { ActivityRowSkeleton, SkeletonStack } from './Skeleton';
@@ -12,8 +12,13 @@ const POLL_INTERVAL_MS = 30_000;
 
 export function ActivityFeed() {
   const parentRef = useRef<HTMLDivElement | null>(null);
+  const pendingPrependRef = useRef(false);
+  const prevScrollHeightRef = useRef(0);
+
   const handlePrepended = useCallback((addedCount: number) => {
-    adjustScrollForPrependedRows(parentRef.current, addedCount, ROW_HEIGHT);
+    if (addedCount <= 0 || !parentRef.current) return;
+    prevScrollHeightRef.current = parentRef.current.scrollHeight;
+    pendingPrependRef.current = true;
   }, []);
 
   const {
@@ -29,6 +34,12 @@ export function ActivityFeed() {
     pollingEnabled: true,
     onNewItemsPrepended: handlePrepended,
   });
+
+  useLayoutEffect(() => {
+    if (!pendingPrependRef.current || !parentRef.current) return;
+    adjustScrollForPrependedRows(parentRef.current, prevScrollHeightRef.current);
+    pendingPrependRef.current = false;
+  }, [items]);
 
   const rowCount = items.length + (hasMore ? 1 : 0);
 
@@ -93,9 +104,10 @@ export function ActivityFeed() {
             return (
               <div
                 key={isLoaderRow ? 'loader-row' : event.id}
-                className="absolute left-0 top-0 flex w-full items-center justify-between gap-4 border-b border-white/5 px-3 py-2 text-sm"
+                ref={virtualizer.measureElement}
+                data-index={virtualRow.index}
+                className="absolute left-0 top-0 flex w-full items-start justify-between gap-4 border-b border-white/5 px-3 py-2 text-sm"
                 style={{
-                  height: `${virtualRow.size}px`,
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
               >
@@ -103,7 +115,7 @@ export function ActivityFeed() {
                   <ActivityRowSkeleton />
                 ) : (
                   <>
-                    <span>{event.summary}</span>
+                    <span className="min-w-0 break-words">{event.summary}</span>
                     <span className="shrink-0 text-muted" title={event.created_at}>
                       {formatRelativeTime(event.created_at)}
                     </span>

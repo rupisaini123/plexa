@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import * as motionLib from '../lib/motion';
 import { LibraryPage } from './LibraryPage';
 
 vi.mock('../lib/api', async () => {
@@ -29,13 +30,30 @@ vi.mock('../context/PlaylistActionsContext', () => ({
   }),
 }));
 
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getVirtualItems: () => Array.from({ length: count }, (_, index) => ({
+      index,
+      start: index * 56,
+      size: 56,
+      key: index,
+    })),
+    getTotalSize: () => count * 56,
+    measureElement: vi.fn(),
+  }),
+}));
+
 import { api } from '../lib/api';
 
-function mockMatchMedia({ desktop = false }: { desktop?: boolean } = {}) {
+function mockMatchMedia({
+  desktop = false,
+  reducedMotion = true,
+}: { desktop?: boolean; reducedMotion?: boolean } = {}) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: (query: string) => ({
-      matches: query.includes('min-width: 1024px') ? desktop : false,
+      matches: (query.includes('prefers-reduced-motion') && reducedMotion)
+        || (query.includes('min-width: 1024px') ? desktop : false),
       media: query,
       onchange: null,
       addListener: () => undefined,
@@ -61,6 +79,10 @@ describe('LibraryPage', () => {
     playerState.playTracks.mockReset();
     playerState.current = null;
     mockMatchMedia({ desktop: false });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('shows artwork-forward track rows in the tracks tab', async () => {
@@ -99,13 +121,14 @@ describe('LibraryPage', () => {
 
     expect(await screen.findByText('Neon Skyline')).toBeInTheDocument();
     expect(screen.getByText('Aurora · Night Drive')).toBeInTheDocument();
-    const poster = screen.getByRole('presentation');
-    expect(poster).toHaveAttribute('src', '/artwork/neon.png');
+    const poster = screen.getAllByRole('presentation').find(
+      (element) => element.getAttribute('src') === '/artwork/neon.png',
+    );
+    expect(poster).toBeTruthy();
     expect(screen.getByRole('button', { name: /Play Neon Skyline/i })).toBeInTheDocument();
   });
 
   it('loads more artists through the infinite list boundary', async () => {
-    const user = userEvent.setup();
     vi.mocked(api).mockImplementation(async (path: string) => {
       if (path.includes('/api/library/artists') && path.includes('start=0')) {
         return {
@@ -126,7 +149,6 @@ describe('LibraryPage', () => {
 
     renderLibrary();
     expect(await screen.findByText('Aurora')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Load more/i }));
     expect(await screen.findByText('Boreal')).toBeInTheDocument();
     expect(screen.getByText(/2 artists loaded/i)).toBeInTheDocument();
   });
@@ -311,5 +333,75 @@ describe('LibraryPage', () => {
     expect(container.querySelector('.library-detail-sheet')).toBeTruthy();
     expect(container.querySelector('.library-detail-backdrop-player-active')).toBeTruthy();
     expect(screen.getByTestId('library-detail-scroll')).toBeInTheDocument();
+  });
+
+  it('loads tracks directly from the tracks tab route', async () => {
+    vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path.startsWith('/api/library/tracks')) {
+        return {
+          items: [{ ratingKey: 't1', title: 'Neon Skyline', artist: 'Aurora', artUrl: '/artwork/neon.png' }],
+          nextStart: 1,
+          hasMore: false,
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    renderLibrary('/library?tab=tracks');
+    expect(await screen.findByText('Neon Skyline')).toBeInTheDocument();
+    expect(screen.getByTestId('library-tracks')).toBeInTheDocument();
+  });
+
+  it('replays grid reveals when switching tabs with reduced motion off', async () => {
+    const user = userEvent.setup();
+    mockMatchMedia({ reducedMotion: false });
+    vi.spyOn(motionLib, 'useAppReducedMotion').mockReturnValue(false);
+
+    vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path.startsWith('/api/library/artists')) {
+        return {
+          items: [{ ratingKey: 'a1', title: 'Aurora', artUrl: '/artwork/a.png' }],
+          nextStart: 1,
+          hasMore: false,
+        };
+      }
+      if (path.startsWith('/api/library/albums')) {
+        return {
+          items: [{ ratingKey: 'al1', title: 'Night Drive', artist: 'Aurora', artUrl: '/artwork/album.png' }],
+          nextStart: 1,
+          hasMore: false,
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    renderLibrary();
+    expect(await screen.findByText('Aurora')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /albums/i }));
+    expect(await screen.findByText('Night Drive')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /artists/i }));
+    expect(await screen.findByText('Aurora')).toBeInTheDocument();
+  });
+
+  it('renders track reveal wrappers when reduced motion is off', async () => {
+    mockMatchMedia({ reducedMotion: false });
+    vi.spyOn(motionLib, 'useAppReducedMotion').mockReturnValue(false);
+
+    vi.mocked(api).mockImplementation(async (path: string) => {
+      if (path.startsWith('/api/library/tracks')) {
+        return {
+          items: [{ ratingKey: 't1', title: 'Neon Skyline', artist: 'Aurora', artUrl: '/artwork/neon.png' }],
+          nextStart: 1,
+          hasMore: false,
+        };
+      }
+      throw new Error(`Unexpected path: ${path}`);
+    });
+
+    renderLibrary('/library?tab=tracks');
+    expect(await screen.findByText('Neon Skyline')).toBeInTheDocument();
+    expect(screen.getByTestId('reveal-list-item')).toBeInTheDocument();
   });
 });

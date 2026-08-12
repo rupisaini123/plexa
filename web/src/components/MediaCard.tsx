@@ -1,5 +1,8 @@
+import { motion } from 'motion/react';
 import { Disc3, Mic2, Play } from 'lucide-react';
 import type { TrackItem } from '../lib/api';
+import { tapScale } from '../lib/motion';
+import { tooltipProps } from '../lib/tooltip';
 import { Artwork } from './Artwork';
 import { MarqueeText } from './MarqueeText';
 
@@ -29,8 +32,10 @@ export function MediaCard({
 
   if (density === 'compact') {
     return (
-      <div
+      <motion.div
         className={`media-card media-card-compact group ${selected ? 'media-card-selected' : ''}`}
+        whileHover={{ scale: 1.01 }}
+        transition={tapScale.transition}
       >
         <button type="button" className="media-card-main" onClick={onOpen}>
           <Artwork
@@ -50,24 +55,30 @@ export function MediaCard({
           </div>
         </button>
         {onPlay && (
-          <button
+          <motion.button
             type="button"
             className="media-card-play shrink-0"
             aria-label={`Play ${item.title}`}
+            {...tooltipProps('Play')}
             onClick={(e) => {
               e.stopPropagation();
               onPlay();
             }}
+            {...tapScale}
           >
             <Play className="h-4 w-4 translate-x-px" fill="currentColor" aria-hidden />
-          </button>
+          </motion.button>
         )}
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className={`media-card media-card-comfortable group ${selected ? 'media-card-selected' : ''}`}>
+    <motion.div
+      className={`media-card media-card-comfortable group ${selected ? 'media-card-selected' : ''}`}
+      whileHover={{ y: -2 }}
+      transition={tapScale.transition}
+    >
       <div className="relative">
         <button type="button" className="media-card-cover" onClick={onOpen}>
           <Artwork
@@ -84,17 +95,19 @@ export function MediaCard({
         </button>
         {onPlay && (
           <div className="media-card-play-overlay">
-            <button
+            <motion.button
               type="button"
               className="media-card-play"
               aria-label={`Play ${item.title}`}
+              {...tooltipProps('Play')}
               onClick={(e) => {
                 e.stopPropagation();
                 onPlay();
               }}
+              {...tapScale}
             >
               <Play className="h-4 w-4 translate-x-px" fill="currentColor" aria-hidden />
-            </button>
+            </motion.button>
           </div>
         )}
       </div>
@@ -102,6 +115,6 @@ export function MediaCard({
         <MarqueeText text={item.title} className="text-sm font-semibold" />
         <p className="truncate text-xs text-muted">{subtitle}</p>
       </button>
-    </div>
+    </motion.div>
   );
 }

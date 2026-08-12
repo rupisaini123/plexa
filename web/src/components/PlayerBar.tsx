@@ -1,8 +1,11 @@
 import type { CSSProperties } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ListMusic, ListPlus, Music2, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaylistActions } from '../context/PlaylistActionsContext';
+import { slideFromBottom, springSoft, tapScale } from '../lib/motion';
+import { tooltipProps } from '../lib/tooltip';
 import { MarqueeText } from './MarqueeText';
 
 function formatTime(seconds: number): string {
@@ -19,7 +22,6 @@ function setPlayerBarOffset(px: number) {
 
 export function PlayerBar() {
   const player = usePlayer();
-  const { openForTrack } = usePlaylistActions();
   const track = player.current;
   const barRef = useRef<HTMLElement>(null);
   const [artFailed, setArtFailed] = useState(false);
@@ -30,7 +32,6 @@ export function PlayerBar() {
 
   useLayoutEffect(() => {
     if (!track) {
-      setPlayerBarOffset(0);
       return;
     }
 
@@ -52,7 +53,38 @@ export function PlayerBar() {
     };
   }, [track]);
 
-  if (!track) return null;
+  const handleExitComplete = () => {
+    setPlayerBarOffset(0);
+  };
+
+  return (
+    <AnimatePresence onExitComplete={handleExitComplete}>
+      {track ? (
+        <PlayerBarContent
+          key={track.ratingKey}
+          barRef={barRef}
+          track={track}
+          artFailed={artFailed}
+          setArtFailed={setArtFailed}
+        />
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+function PlayerBarContent({
+  barRef,
+  track,
+  artFailed,
+  setArtFailed,
+}: {
+  barRef: React.RefObject<HTMLElement | null>;
+  track: NonNullable<ReturnType<typeof usePlayer>['current']>;
+  artFailed: boolean;
+  setArtFailed: (value: boolean) => void;
+}) {
+  const player = usePlayer();
+  const { openForTrack } = usePlaylistActions();
 
   const duration = player.duration > 0
     ? player.duration
@@ -63,9 +95,14 @@ export function PlayerBar() {
   const poster = track.artUrl && !artFailed ? track.artUrl : null;
 
   return (
-    <footer
+    <motion.footer
       ref={barRef}
       className="player-bar fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-surface-elevated/95 backdrop-blur-xl"
+      variants={slideFromBottom}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={springSoft}
     >
       <div className="app-gutter py-3">
         {/* Seek bar — full width on all breakpoints */}
@@ -131,7 +168,7 @@ export function PlayerBar() {
               onClick={() => openForTrack(track)}
               type="button"
               aria-label={`Add ${track.title} to playlist`}
-              title="Add to playlist"
+              {...tooltipProps('Add to playlist', 'top')}
             >
               <ListPlus className="h-5 w-5" aria-hidden />
             </button>
@@ -142,7 +179,7 @@ export function PlayerBar() {
               aria-expanded={player.showQueue}
               aria-controls="queue-panel"
               aria-label="Queue"
-              title="Queue"
+              {...tooltipProps('Queue', 'top')}
             >
               <ListMusic className="h-5 w-5" aria-hidden />
             </button>
@@ -151,35 +188,36 @@ export function PlayerBar() {
               onClick={() => void player.prev()}
               type="button"
               aria-label="Previous track"
-              title="Previous"
+              {...tooltipProps('Previous', 'top')}
             >
               <SkipBack className="h-5 w-5" aria-hidden />
             </button>
-            <button
+            <motion.button
               className="player-play-btn"
               onClick={() => player.toggle()}
               type="button"
               aria-label={player.isPlaying ? 'Pause' : 'Play'}
-              title={player.isPlaying ? 'Pause' : 'Play'}
+              {...tooltipProps(player.isPlaying ? 'Pause' : 'Play', 'top')}
+              {...tapScale}
             >
               {player.isPlaying ? (
                 <Pause className="h-5 w-5" fill="currentColor" aria-hidden />
               ) : (
                 <Play className="h-5 w-5 translate-x-0.5" fill="currentColor" aria-hidden />
               )}
-            </button>
+            </motion.button>
             <button
               className="player-icon-btn"
               onClick={() => void player.next()}
               type="button"
               aria-label="Next track"
-              title="Next"
+              {...tooltipProps('Next', 'top')}
             >
               <SkipForward className="h-5 w-5" aria-hidden />
             </button>
           </div>
         </div>
       </div>
-    </footer>
+    </motion.footer>
   );
 }

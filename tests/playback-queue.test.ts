@@ -3,6 +3,7 @@ import {
   advanceIndexOnPlaybackFinished,
   advanceQueue,
   clampSeekOffset,
+  clearQueue,
   createQueueFromTracks,
   getCurrentTrack,
   getNextTrack,
@@ -10,7 +11,10 @@ import {
   loadQueue,
   parseSeekSeconds,
   previousTrack,
+  removeQueueItem,
+  reorderQueueItems,
   setQueueLoop,
+  setQueueShuffle,
   syncQueueFromToken,
 } from '../src/services/playback.js';
 import { closeDb } from '../src/db/index.js';
@@ -146,5 +150,63 @@ describe('playback queue', () => {
     expect(parseSeekSeconds('15')).toBe(15);
     expect(parseSeekSeconds('abc')).toBe(30);
     expect(parseSeekSeconds('-5')).toBe(30);
+  });
+
+  it('removes a track before the current index', () => {
+    const queue = createQueueFromTracks('user', tracks);
+    queue.currentIndex = 2;
+    removeQueueItem(queue, 0);
+    expect(queue.items.map((i) => i.ratingKey)).toEqual(['2', '3']);
+    expect(queue.currentIndex).toBe(1);
+    expect(getCurrentTrack(queue)?.ratingKey).toBe('3');
+  });
+
+  it('removes the current track and advances to the next item', () => {
+    const queue = createQueueFromTracks('user', tracks);
+    removeQueueItem(queue, 0);
+    expect(queue.items.map((i) => i.ratingKey)).toEqual(['2', '3']);
+    expect(queue.currentIndex).toBe(0);
+    expect(getCurrentTrack(queue)?.ratingKey).toBe('2');
+  });
+
+  it('removes the last track while current and moves to previous', () => {
+    const queue = createQueueFromTracks('user', tracks);
+    queue.currentIndex = 2;
+    removeQueueItem(queue, 2);
+    expect(queue.items.map((i) => i.ratingKey)).toEqual(['1', '2']);
+    expect(queue.currentIndex).toBe(1);
+    expect(getCurrentTrack(queue)?.ratingKey).toBe('2');
+  });
+
+  it('clears the queue when removing the only track', () => {
+    const queue = createQueueFromTracks('user', [tracks[0]]);
+    removeQueueItem(queue, 0);
+    expect(loadQueue('user')).toBeNull();
+  });
+
+  it('reorders items while keeping the current track in sync', () => {
+    const queue = createQueueFromTracks('user', tracks);
+    queue.currentIndex = 1;
+    const currentToken = queue.items[1].streamToken;
+    reorderQueueItems(queue, 1, 0);
+    expect(queue.items[0].streamToken).toBe(currentToken);
+    expect(queue.currentIndex).toBe(0);
+    expect(getCurrentTrack(queue)?.ratingKey).toBe('2');
+  });
+
+  it('toggles shuffle and reshuffles upcoming tracks only', () => {
+    const queue = createQueueFromTracks('user', tracks, { shuffle: false });
+    queue.currentIndex = 0;
+    const currentToken = queue.items[0].streamToken;
+    setQueueShuffle(queue, true);
+    expect(queue.shuffle).toBe(true);
+    expect(queue.items[0].streamToken).toBe(currentToken);
+    expect(queue.items.slice(1).map((i) => i.ratingKey).sort().join(',')).toBe('2,3');
+  });
+
+  it('clears queue via clearQueue helper', () => {
+    createQueueFromTracks('user', tracks);
+    clearQueue('user');
+    expect(loadQueue('user')).toBeNull();
   });
 });

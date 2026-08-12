@@ -127,6 +127,7 @@ export interface PlaybackQueue {
   items: QueueItem[];
   currentIndex: number;
   shuffle: boolean;
+  loop?: boolean;
 }
 
 export interface PlexOAuthStart {

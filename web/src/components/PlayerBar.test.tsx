@@ -53,6 +53,14 @@ class FakeAudio {
   pause() {
     this.paused = true;
   }
+
+  removeAttribute(name: string) {
+    if (name === 'src') this.src = '';
+  }
+
+  load() {
+    // no-op
+  }
 }
 
 let fakeAudio: FakeAudio;
@@ -113,7 +121,7 @@ describe('PlayerBar', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: (query: string) => ({
-        matches: false,
+        matches: query.includes('prefers-reduced-motion'),
         media: query,
         onchange: null,
         addListener: () => undefined,

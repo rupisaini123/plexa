@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, Disc3, Mic2, X } from 'lucide-react';
 import { api, type PageResult, type TrackItem } from '../lib/api';
+import { modalBackdrop, modalPanel, springSoft } from '../lib/motion';
+import { tooltipProps } from '../lib/tooltip';
 import { usePlayer } from '../context/PlayerContext';
 import { useInfiniteMediaList } from '../hooks/useInfiniteMediaList';
 import { Artwork } from './Artwork';
@@ -198,7 +201,7 @@ export function LibraryDetailPane({
             )}
           </div>
         </div>
-        <button ref={closeRef} type="button" className="btn btn-secondary shrink-0" onClick={onClose} aria-label="Close details">
+        <button ref={closeRef} type="button" className="btn btn-secondary shrink-0" onClick={onClose} aria-label="Close details" {...tooltipProps('Close details')}>
           <X className="h-4 w-4" aria-hidden />
         </button>
       </div>
@@ -301,12 +304,41 @@ export function LibraryDetailPane({
 
   if (mode === 'sheet') {
     return (
-      <div
-        className={`library-detail-backdrop ${playerActive ? 'library-detail-backdrop-player-active' : ''}`}
-      >
-        <button type="button" className="absolute inset-0" aria-label="Close details" onClick={onClose} />
-        <div className="relative z-10 min-w-0 w-full max-w-2xl">{content}</div>
-      </div>
+      <AnimatePresence>
+        <motion.div
+          key="library-detail-sheet"
+          className={`library-detail-backdrop ${playerActive ? 'library-detail-backdrop-player-active' : ''}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={springSoft}
+        >
+          <motion.button
+            type="button"
+            className="absolute inset-0"
+            aria-label="Close details"
+            {...tooltipProps('Close details')}
+            onClick={onClose}
+            variants={modalBackdrop}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={springSoft}
+          />
+          <div className="pointer-events-none relative z-10 flex min-w-0 w-full max-w-2xl items-end justify-center md:items-center">
+            <motion.div
+              className="pointer-events-auto min-w-0 w-full"
+              variants={modalPanel}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={springSoft}
+            >
+              {content}
+            </motion.div>
+          </div>
+        </motion.div>
+      </AnimatePresence>
     );
   }
 

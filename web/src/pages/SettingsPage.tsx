@@ -538,17 +538,16 @@ export function SettingsPage() {
         publicUrl={publicUrl}
       />
 
-      {disconnectOpen && (
-        <ConfirmDialog
-          title="Disconnect Plex"
-          description="Disconnect Plex account and clear stored credentials?"
-          confirmLabel="Disconnect"
-          danger
-          busy={disconnectBusy}
-          onConfirm={confirmDisconnect}
-          onCancel={closeDisconnect}
-        />
-      )}
+      <ConfirmDialog
+        open={disconnectOpen}
+        title="Disconnect Plex"
+        description="Disconnect Plex account and clear stored credentials?"
+        confirmLabel="Disconnect"
+        danger
+        busy={disconnectBusy}
+        onConfirm={confirmDisconnect}
+        onCancel={closeDisconnect}
+      />
     </div>
   );
 }

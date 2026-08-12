@@ -1,7 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, Disc3, ListMusic, Mic2, Music2, Play, Search, X } from 'lucide-react';
 import { api, type PageResult, type SearchGroupedResults, type SearchMediaType, type TrackItem } from '../lib/api';
+import { tooltipProps } from '../lib/tooltip';
 import { useInfiniteMediaList } from '../hooks/useInfiniteMediaList';
+import { fadeUp, modalBackdrop, springSoft } from '../lib/motion';
 import { Artwork } from './Artwork';
 import { InfiniteListBoundary } from './InfiniteListBoundary';
 import { MarqueeText } from './MarqueeText';
@@ -172,6 +175,7 @@ export function LibrarySearch({
               className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-accent text-white transition hover:bg-accent-hover"
               type="button"
               aria-label={`Play ${item.title}`}
+              {...tooltipProps('Play')}
               onClick={() => {
                 if (type === 'albums') onPlayAlbum(item);
                 else onPlayPlaylist(item);
@@ -213,124 +217,164 @@ export function LibrarySearch({
           autoComplete="off"
         />
         {query && (
-          <button type="button" className="btn btn-secondary px-3" onClick={clear} aria-label="Clear search">
+          <button type="button" className="btn btn-secondary px-3" onClick={clear} aria-label="Clear search" {...tooltipProps('Clear search')}>
             <X className="h-4 w-4" aria-hidden />
           </button>
         )}
       </div>
 
-      {open && canSearch && (
-        <>
-          <button
-            type="button"
-            className="library-search-scrim"
-            aria-label="Close search"
-            onClick={() => setOpen(false)}
-          />
-          <div
-            id={dialogId}
-            className="library-search-panel card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Search results"
-          >
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
+      <AnimatePresence>
+        {open && canSearch ? (
+          <>
+            <motion.button
+              key="library-search-scrim"
+              type="button"
+              className="library-search-scrim"
+              aria-label="Close search"
+              {...tooltipProps('Close search')}
+              onClick={() => setOpen(false)}
+              variants={modalBackdrop}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={springSoft}
+            />
+            <motion.div
+              key="library-search-panel"
+              id={dialogId}
+              className="library-search-panel card"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Search results"
+              variants={fadeUp}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={springSoft}
+            >
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div>
+                  {focusedType ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => onFocusedTypeChange(null)}
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
+                      Back to all results
+                    </button>
+                  ) : (
+                    <div className="text-sm text-muted" aria-live="polite">
+                      {searching ? (
+                        <span className="inline-flex items-center gap-2" role="status" aria-busy="true">
+                          <span className="sr-only">Searching…</span>
+                          <Skeleton className="h-4 w-40" />
+                        </span>
+                      ) : `${totalResults} results for “${trimmed}”`}
+                    </div>
+                  )}
+                </div>
+                <button type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>
+                  Close
+                </button>
+              </div>
+
+              {error && (
+                <p className="mb-3 text-sm text-danger" role="alert">{error}</p>
+              )}
+
+              <AnimatePresence mode="wait">
                 {focusedType ? (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => onFocusedTypeChange(null)}
+                  <motion.div
+                    key={`focused-${focusedType}`}
+                    className="space-y-2"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={springSoft}
                   >
-                    <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-                    Back to all results
-                  </button>
-                ) : (
-                  <div className="text-sm text-muted" aria-live="polite">
-                    {searching ? (
-                      <span className="inline-flex items-center gap-2" role="status" aria-busy="true">
-                        <span className="sr-only">Searching…</span>
-                        <Skeleton className="h-4 w-40" />
-                      </span>
-                    ) : `${totalResults} results for “${trimmed}”`}
-                  </div>
-                )}
-              </div>
-              <button type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>
-                Close
-              </button>
-            </div>
-
-            {error && (
-              <p className="mb-3 text-sm text-danger" role="alert">{error}</p>
-            )}
-
-            {focusedType ? (
-              <div className="space-y-2">
-                <h3 className="font-semibold capitalize">{focusedType}</h3>
-                {focusedList.loading && focusedList.items.length === 0 && (
-                  <SkeletonStack count={5} label="Loading search results">
-                    {(index) => <TrackRowSkeleton key={index} showDuration={false} showActions={false} />}
-                  </SkeletonStack>
-                )}
-                {focusedList.items.map((item) => renderResultRow(item, focusedType))}
-                <InfiniteListBoundary
-                  hasMore={focusedList.hasMore}
-                  loading={focusedList.loading}
-                  loadingMore={focusedList.loadingMore}
-                  error={focusedList.error}
-                  onLoadMore={focusedList.loadMore}
-                  onRetry={focusedList.retry}
-                  endLabel={focusedList.items.length > 0 ? `${focusedList.items.length} results` : undefined}
-                />
-                {!focusedList.loading && !focusedList.error && focusedList.items.length === 0 && (
-                  <p className="text-sm text-muted">No results</p>
-                )}
-              </div>
-            ) : searching && !grouped ? (
-              <div className="grid gap-4 sm:grid-cols-2" role="status" aria-busy="true">
-                <span className="sr-only">Searching…</span>
-                {GROUP_META.map((group) => (
-                  <SearchGroupSkeleton key={group.type} />
-                ))}
-              </div>
-            ) : grouped ? (
-              <div className="grid min-w-0 gap-5 lg:grid-cols-2">
-                {GROUP_META.map((group) => {
-                  const items = grouped[group.type];
-                  const Icon = group.icon;
-                  return (
-                    <section key={group.type} className="min-w-0 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="inline-flex items-center gap-2 font-semibold">
-                          <Icon className="h-4 w-4 text-muted" aria-hidden />
-                          {group.title}
-                        </h3>
-                        {items.length > 0 && (
-                          <button
-                            type="button"
-                            className="btn btn-secondary px-3 py-1.5 text-xs"
-                            onClick={() => onFocusedTypeChange(group.type)}
-                          >
-                            See all
-                          </button>
-                        )}
-                      </div>
-                      {items.length === 0 ? (
-                        <p className="text-sm text-muted">No results</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {items.slice(0, 5).map((item) => renderResultRow(item, group.type))}
-                        </div>
-                      )}
-                    </section>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        </>
-      )}
+                    <h3 className="font-semibold capitalize">{focusedType}</h3>
+                    {focusedList.loading && focusedList.items.length === 0 && (
+                      <SkeletonStack count={5} label="Loading search results">
+                        {(index) => <TrackRowSkeleton key={index} showDuration={false} showActions={false} />}
+                      </SkeletonStack>
+                    )}
+                    {focusedList.items.map((item) => renderResultRow(item, focusedType))}
+                    <InfiniteListBoundary
+                      hasMore={focusedList.hasMore}
+                      loading={focusedList.loading}
+                      loadingMore={focusedList.loadingMore}
+                      error={focusedList.error}
+                      onLoadMore={focusedList.loadMore}
+                      onRetry={focusedList.retry}
+                      endLabel={focusedList.items.length > 0 ? `${focusedList.items.length} results` : undefined}
+                    />
+                    {!focusedList.loading && !focusedList.error && focusedList.items.length === 0 && (
+                      <p className="text-sm text-muted">No results</p>
+                    )}
+                  </motion.div>
+                ) : searching && !grouped ? (
+                  <motion.div
+                    key="searching"
+                    className="grid gap-4 sm:grid-cols-2"
+                    role="status"
+                    aria-busy="true"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={springSoft}
+                  >
+                    <span className="sr-only">Searching…</span>
+                    {GROUP_META.map((group) => (
+                      <SearchGroupSkeleton key={group.type} />
+                    ))}
+                  </motion.div>
+                ) : grouped ? (
+                  <motion.div
+                    key="grouped"
+                    className="grid min-w-0 gap-5 lg:grid-cols-2"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={springSoft}
+                  >
+                    {GROUP_META.map((group) => {
+                      const items = grouped[group.type];
+                      const Icon = group.icon;
+                      return (
+                        <section key={group.type} className="min-w-0 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="inline-flex items-center gap-2 font-semibold">
+                              <Icon className="h-4 w-4 text-muted" aria-hidden />
+                              {group.title}
+                            </h3>
+                            {items.length > 0 && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary px-3 py-1.5 text-xs"
+                                onClick={() => onFocusedTypeChange(group.type)}
+                              >
+                                See all
+                              </button>
+                            )}
+                          </div>
+                          {items.length === 0 ? (
+                            <p className="text-sm text-muted">No results</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {items.slice(0, 5).map((item) => renderResultRow(item, group.type))}
+                            </div>
+                          )}
+                        </section>
+                      );
+                    })}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </motion.div>
+          </>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

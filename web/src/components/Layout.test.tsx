@@ -6,6 +6,7 @@ import { ThemeProvider } from '../context/ThemeContext';
 import { PlayerProvider } from '../context/PlayerContext';
 import { PlaylistActionsProvider } from '../context/PlaylistActionsContext';
 import { Layout } from '../components/Layout';
+import * as motionLib from '../lib/motion';
 
 vi.mock('../lib/api', async () => {
   const actual = await vi.importActual<typeof import('../lib/api')>('../lib/api');
@@ -17,11 +18,15 @@ vi.mock('../lib/api', async () => {
   };
 });
 
-function mockMatchMedia({ compact = false }: { compact?: boolean } = {}) {
+function mockMatchMedia({
+  compact = false,
+  reducedMotion = true,
+}: { compact?: boolean; reducedMotion?: boolean } = {}) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: (query: string) => ({
-      matches: query.includes('max-width: 1023px') ? compact : false,
+      matches: (query.includes('prefers-reduced-motion') && reducedMotion)
+        || (query.includes('max-width: 1023px') ? compact : false),
       media: query,
       onchange: null,
       addListener: () => undefined,
@@ -76,6 +81,23 @@ describe('theme and layout', () => {
     expect(within(primaryNav).getByRole('link', { name: /settings/i })).toBeInTheDocument();
   });
 
+  it('wraps routed pages in a motion outlet stack on first render when reduced motion is off', () => {
+    mockMatchMedia({ compact: false, reducedMotion: false });
+    const reducedMotionSpy = vi.spyOn(motionLib, 'useAppReducedMotion').mockReturnValue(false);
+    renderLayout();
+
+    expect(document.querySelector('.page-outlet-stack')).toBeInTheDocument();
+    expect(document.querySelector('.page-outlet-stack .bg-surface')).toBeInTheDocument();
+    reducedMotionSpy.mockRestore();
+  });
+
+  it('renders a plain outlet when reduced motion is preferred', () => {
+    mockMatchMedia({ compact: false, reducedMotion: true });
+    renderLayout();
+
+    expect(document.querySelector('.page-outlet-stack')).not.toBeInTheDocument();
+  });
+
   it('does not render the hamburger on desktop viewports', () => {
     mockMatchMedia({ compact: false });
     renderLayout();
@@ -117,14 +139,16 @@ describe('theme and layout', () => {
     await user.click(openButton);
     expect(screen.getByRole('button', { name: /close menu/i })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('button', { name: /dismiss menu/i })).toBeInTheDocument();
-    expect(document.querySelector('.nav-mobile')).toHaveClass('nav-mobile-open');
+    expect(document.querySelector('.nav-mobile')).toBeInTheDocument();
 
     const mobileNav = screen.getByRole('navigation', { name: /mobile/i });
     expect(within(mobileNav).getByRole('link', { name: /library/i })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /theme:/i }).length).toBeGreaterThanOrEqual(1);
 
     await user.click(within(mobileNav).getByRole('link', { name: /library/i }));
-    expect(screen.queryByRole('navigation', { name: /mobile/i })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('navigation', { name: /mobile/i })).not.toBeInTheDocument();
+    });
     expect(screen.getByRole('button', { name: /open menu/i })).toHaveAttribute('aria-expanded', 'false');
   });
 
@@ -137,12 +161,16 @@ describe('theme and layout', () => {
     expect(screen.getByRole('navigation', { name: /mobile/i })).toBeInTheDocument();
 
     await user.keyboard('{Escape}');
-    expect(screen.queryByRole('navigation', { name: /mobile/i })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('navigation', { name: /mobile/i })).not.toBeInTheDocument();
+    });
 
     await user.click(screen.getByRole('button', { name: /open menu/i }));
     const openMenu = screen.getByRole('navigation', { name: /mobile/i }).parentElement!;
     await user.click(within(openMenu).getByRole('button', { name: /log out/i }));
     await waitFor(() => expect(onLogout).toHaveBeenCalled());
-    expect(screen.queryByRole('navigation', { name: /mobile/i })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('navigation', { name: /mobile/i })).not.toBeInTheDocument();
+    });
   });
 });

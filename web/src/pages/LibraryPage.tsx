@@ -16,9 +16,9 @@ import { InfiniteListBoundary } from '../components/InfiniteListBoundary';
 import { LibraryDetailPane, type LibraryDetailSelection } from '../components/LibraryDetailPane';
 import { LibrarySearch } from '../components/LibrarySearch';
 import { LibraryToolbar } from '../components/LibraryToolbar';
+import { LibraryTracksList } from '../components/LibraryTracksList';
 import { MediaCard } from '../components/MediaCard';
-import { TrackRow } from '../components/TrackRow';
-import { AddToPlaylistButton } from '../components/AddToPlaylistButton';
+import { RevealItem, RevealStagger, RevealStaggerGroup, useRevealBatches } from '../components/motion/Reveal';
 import { MediaCardSkeleton, SkeletonStack, TrackRowSkeleton } from '../components/Skeleton';
 
 const DEFAULT_SORT: Record<LibraryKind, LibrarySort> = {
@@ -222,6 +222,12 @@ export function LibraryPage() {
   const showInlineDetail = Boolean(selection) && isDesktop && tab !== 'tracks';
   const showSheetDetail = Boolean(selection) && (!isDesktop || tab === 'tracks');
   const unconfigured = collection.error.toLowerCase().includes('music library not configured');
+  const trackListMaxHeight = player.current
+    ? 'max-h-[calc(100dvh-var(--library-detail-sticky-top)-12rem-var(--player-bar-offset))]'
+    : 'max-h-[calc(100dvh-var(--library-detail-sticky-top)-8rem-var(--player-bar-offset))]';
+
+  const datasetKey = `${tab}:${sort}`;
+  const batchStarts = useRevealBatches(collection.items.length, collection.loading, datasetKey);
 
   return (
     <div className="library-page space-y-5">
@@ -235,13 +241,20 @@ export function LibraryPage() {
             </p>
           </div>
           {mosaic.length > 0 && (
-            <div className="library-mosaic hidden overflow-visible lg:flex" aria-hidden>
+            <RevealStagger
+              key={tab}
+              staggerOnMount
+              className="library-mosaic hidden overflow-visible lg:flex"
+              aria-hidden
+            >
               {mosaic.map((item) => (
-                <div key={item.ratingKey} className="library-mosaic-tile">
-                  <img src={item.artUrl} alt="" className="h-full w-full object-cover" />
-                </div>
+                <RevealItem key={item.ratingKey}>
+                  <div className="library-mosaic-tile">
+                    <img src={item.artUrl} alt="" className="h-full w-full object-cover" />
+                  </div>
+                </RevealItem>
               ))}
-            </div>
+            </RevealStagger>
           )}
         </div>
         <div className="mt-5">
@@ -291,6 +304,7 @@ export function LibraryPage() {
 
       <div className={showInlineDetail ? 'library-split' : undefined}>
         <section
+          key={datasetKey}
           id={`library-panel-${tab}`}
           role="tabpanel"
           aria-labelledby={`library-tab-${tab}`}
@@ -345,25 +359,13 @@ export function LibraryPage() {
           )}
 
           {tab === 'tracks' && collection.items.length > 0 && (
-            <div className="card space-y-1.5 p-3 sm:p-4">
-              {collection.items.map((item) => (
-                <TrackRow
-                  key={item.ratingKey}
-                  track={item}
-                  onPlay={() => player.playTracks([item])}
-                  actions={<AddToPlaylistButton track={item} />}
-                />
-              ))}
-              <InfiniteListBoundary
-                hasMore={collection.hasMore}
-                loading={collection.loading}
-                loadingMore={collection.loadingMore}
-                error={collection.error && collection.items.length > 0 ? collection.error : ''}
-                onLoadMore={collection.loadMore}
-                onRetry={collection.retry}
-                endLabel={`${collection.items.length} tracks loaded`}
-              />
-            </div>
+            <LibraryTracksList
+              key={datasetKey}
+              tracks={collection}
+              listMaxHeight={trackListMaxHeight}
+              revealKey={datasetKey}
+              onPlayTrack={(track) => player.playTracks([track])}
+            />
           )}
 
           {tab !== 'tracks' && collection.items.length > 0 && (
@@ -373,17 +375,30 @@ export function LibraryPage() {
                   ? compactGridClass(showInlineDetail)
                   : comfortableGridClass(showInlineDetail)}
               >
-                {collection.items.map((item) => (
-                  <MediaCard
-                    key={item.ratingKey}
-                    item={item}
-                    kind={tab === 'artists' ? 'artist' : 'album'}
-                    density={density}
-                    selected={selection?.key === item.ratingKey}
-                    onOpen={() => openDetail(tab === 'artists' ? 'artist' : 'album', item)}
-                    onPlay={() => void playCollectionItem(tab === 'artists' ? 'artist' : 'album', item)}
-                  />
-                ))}
+                {batchStarts.map((start, batchIndex) => {
+                  const end = batchStarts[batchIndex + 1] ?? collection.items.length;
+                  const batchKey = batchIndex === 0 ? datasetKey : `${datasetKey}:batch-${start}`;
+                  return (
+                    <RevealStaggerGroup
+                      key={batchKey}
+                      revealKey={batchKey}
+                      className="contents"
+                    >
+                      {collection.items.slice(start, end).map((item) => (
+                        <RevealItem key={item.ratingKey}>
+                          <MediaCard
+                            item={item}
+                            kind={tab === 'artists' ? 'artist' : 'album'}
+                            density={density}
+                            selected={selection?.key === item.ratingKey}
+                            onOpen={() => openDetail(tab === 'artists' ? 'artist' : 'album', item)}
+                            onPlay={() => void playCollectionItem(tab === 'artists' ? 'artist' : 'album', item)}
+                          />
+                        </RevealItem>
+                      ))}
+                    </RevealStaggerGroup>
+                  );
+                })}
               </div>
               <InfiniteListBoundary
                 hasMore={collection.hasMore}

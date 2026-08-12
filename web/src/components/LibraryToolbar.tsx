@@ -1,4 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowUpDown,
   Disc3,
@@ -10,6 +11,8 @@ import {
   Shuffle,
 } from 'lucide-react';
 import type { LibraryKind, LibrarySort, LibraryView } from '../lib/api';
+import { popoverMenu, springSoft } from '../lib/motion';
+import { tooltipProps } from '../lib/tooltip';
 
 const TABS: { id: LibraryKind; label: string; icon: typeof Mic2 }[] = [
   { id: 'artists', label: 'Artists', icon: Mic2 },
@@ -136,7 +139,7 @@ export function LibraryToolbar({
                 id={`library-tab-${entry.id}`}
                 aria-selected={active}
                 aria-controls={panelId}
-                title={entry.label}
+                {...tooltipProps(entry.label, 'bottom')}
                 className={`library-toolbar-tab nav-pill ${active ? 'nav-pill-active' : ''}`}
                 onClick={() => onTabChange(entry.id)}
               >
@@ -154,7 +157,7 @@ export function LibraryToolbar({
                 type="button"
                 className={`library-toolbar-tab nav-pill ${view === 'grid' ? 'nav-pill-active' : ''}`}
                 aria-pressed={view === 'grid'}
-                title="Grid"
+                {...tooltipProps('Grid', 'bottom')}
                 onClick={() => onViewChange('grid')}
               >
                 <LayoutGrid aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={2} />
@@ -164,7 +167,7 @@ export function LibraryToolbar({
                 type="button"
                 className={`library-toolbar-tab nav-pill ${view === 'list' ? 'nav-pill-active' : ''}`}
                 aria-pressed={view === 'list'}
-                title="List"
+                {...tooltipProps('List', 'bottom')}
                 onClick={() => onViewChange('list')}
               >
                 <List aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={2} />
@@ -180,7 +183,7 @@ export function LibraryToolbar({
               aria-haspopup="menu"
               aria-expanded={sortOpen}
               aria-controls={sortMenuId}
-              title={`Sort: ${activeSortLabel}`}
+              {...tooltipProps(`Sort: ${activeSortLabel}`, 'bottom')}
               onClick={() => setSortOpen((open) => !open)}
             >
               <ArrowUpDown aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={2} />
@@ -188,30 +191,38 @@ export function LibraryToolbar({
               <span className="sr-only">Sort</span>
             </button>
 
-            {sortOpen && (
-              <div
-                id={sortMenuId}
-                className="library-sort-menu card"
-                role="menu"
-                aria-label="Sort options"
-              >
-                {sortOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={activeSort === option.value}
-                    className={`library-sort-option ${activeSort === option.value ? 'library-sort-option-active' : ''}`}
-                    onClick={() => {
-                      onSortChange(option.value);
-                      setSortOpen(false);
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            <AnimatePresence>
+              {sortOpen ? (
+                <motion.div
+                  id={sortMenuId}
+                  className="library-sort-menu card"
+                  role="menu"
+                  aria-label="Sort options"
+                  variants={popoverMenu}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={springSoft}
+                  style={{ transformOrigin: 'top left' }}
+                >
+                  {sortOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={activeSort === option.value}
+                      className={`library-sort-option ${activeSort === option.value ? 'library-sort-option-active' : ''}`}
+                      onClick={() => {
+                        onSortChange(option.value);
+                        setSortOpen(false);
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
 
           {tab === 'tracks' && (
@@ -221,7 +232,7 @@ export function LibraryToolbar({
                   type="button"
                   className="player-icon-btn h-9 w-9"
                   aria-label="Play all"
-                  title="Play all"
+                  {...tooltipProps('Play all', 'bottom')}
                   onClick={onPlayAll}
                 >
                   <Play aria-hidden="true" className="h-4 w-4 translate-x-px" fill="currentColor" strokeWidth={2} />
@@ -232,7 +243,7 @@ export function LibraryToolbar({
                   type="button"
                   className="player-icon-btn h-9 w-9"
                   aria-label="Shuffle"
-                  title="Shuffle"
+                  {...tooltipProps('Shuffle', 'bottom')}
                   onClick={onShuffle}
                 >
                   <Shuffle aria-hidden="true" className="h-4 w-4" strokeWidth={2} />
