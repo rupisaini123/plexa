@@ -1,0 +1,47 @@
+{
+  "name": "plexa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:server": "tsx watch --env-file=.env src/server.ts",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w web && tsc -p tsconfig.build.json",
+    "start": "node --env-file=.env dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && npm run typecheck -w web",
+    "lint": "eslint src tests",
+    "test": "vitest run && npm run test -w web",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ctrl/plex": "^6.1.1",
+    "ask-sdk-core": "^2.14.0",
+    "ask-sdk-express-adapter": "^2.14.0",
+    "ask-sdk-model": "^1.86.0",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.10",
+    "@types/supertest": "^6.0.2",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.22.0",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^3.0.8"
+  }
+}

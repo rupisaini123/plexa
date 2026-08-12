@@ -1,0 +1,29 @@
+services:
+  plexa:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      DATA_DIR: /data
+      APP_SECRET: ${APP_SECRET}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      PLEX_URL: ${PLEX_URL:-http://host.docker.internal:32400}
+    volumes:
+      - plexa-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  plexa-data:

@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Build Docker image
+        run: docker build -t plexa:ci .
+      - name: Smoke test container
+        run: |
+          docker run -d --name plexa-ci -p 3300:3000 \
+            -e APP_SECRET=ci-secret-key-long-enough \
+            -e ADMIN_PASSWORD=ci-test-pass \
+            plexa:ci
+          for i in {1..30}; do
+            curl -fsS http://localhost:3300/health && exit 0
+            sleep 2
+          done
+          docker logs plexa-ci
+          exit 1

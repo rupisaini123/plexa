@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+data
+data-test
+.git
+.env
+web/node_modules
+dist
+coverage
+*.md
+!README.md

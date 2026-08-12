@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 512 512" role="img" aria-label="Plexa icon small">
+  <defs>
+    <linearGradient id="plexa-grad" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6d5efc"/>
+      <stop offset="1" stop-color="#8577ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#plexa-grad)"/>
+  <path
+    fill="#ffffff"
+    fill-rule="evenodd"
+    d="M 148 118
+       L 220 118
+       C 352 118 386 172 386 256
+       C 386 310 352 336 286 336
+       L 220 336
+       L 220 392
+       L 182 392
+       L 148 354
+       L 148 118
+       Z
+       M 242 200
+       L 242 312
+       L 318 256
+       L 242 200
+       Z"
+  />
+</svg>

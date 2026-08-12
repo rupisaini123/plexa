@@ -1,0 +1,36 @@
+{
+  "manifest": {
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "summary": "Play music from your Plex library on Alexa.",
+          "examplePhrases": [
+            "Alexa, ask plexa to start the road trip playlist",
+            "Alexa, ask plexa to mix Fleetwood Mac",
+            "Alexa, ask plexa to play the album Rumours"
+          ],
+          "keywords": ["plex", "music", "playlist"],
+          "name": "Plexa",
+          "description": "Stream music from your Plex library using a custom Alexa skill."
+        }
+      },
+      "isAvailableWorldwide": false,
+      "testingInstructions": "Enable development testing and link endpoint to your public HTTPS URL.",
+      "category": "MUSIC_AND_AUDIO_ACCESSORIES",
+      "distributionCountries": []
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "https://your-domain.example.com/alexa"
+        },
+        "interfaces": [
+          {
+            "type": "AUDIO_PLAYER"
+          }
+        ]
+      }
+    },
+    "manifestVersion": "1.0"
+  }
+}
